@@ -10,7 +10,7 @@ export const useFinanceStore = defineStore('finance', () => {
   const transactions = ref([]) 
 
   // --- PERSISTENCE ---
-  const STORAGE_KEY = 'vue-fin-data-v1'
+  const STORAGE_KEY = 'vue-fin-data-v2' // Mudei a chave para v2 para evitar conflito antigo
   
   function init() {
     const data = localStorage.getItem(STORAGE_KEY)
@@ -49,46 +49,49 @@ export const useFinanceStore = defineStore('finance', () => {
     transactions.value.push({ 
       ...t, 
       id: Date.now() + Math.random(), 
-      date: t.date || new Date().toISOString() 
+      date: t.date || new Date().toISOString().split('T')[0] // Garante data YYYY-MM-DD
     })
   }
 
-  // --- NOVA LÓGICA DE IMPORTAÇÃO NUBANK ---
+  // --- IMPORTAÇÃO NUBANK CORRIGIDA ---
   const importNubankTransactions = (csvText, cardId) => {
     const lines = csvText.split('\n')
     let count = 0
     
-    // Tenta identificar se tem cabeçalho (se a primeira linha tiver 'date' ou 'data')
+    // Pula cabeçalho se existir
     const hasHeader = lines[0].toLowerCase().includes('date') || lines[0].toLowerCase().includes('data')
     const startIndex = hasHeader ? 1 : 0
 
     lines.slice(startIndex).forEach((line) => {
       if (!line.trim()) return
 
-      // Formato esperado: date, title, amount
-      // Ex: 2026-01-25,Undrbarltda,16
+      // Tenta separar por vírgula
       const parts = line.split(',')
       
-      // Proteção básica contra linhas inválidas
-      if (parts.length < 3) return
+      if (parts.length >= 3) {
+        // Formato: date, title, amount
+        const date = parts[0] 
+        // Valor é o ultimo campo
+        let amountStr = parts[parts.length - 1].trim()
+        // Nome é o miolo
+        const title = parts.slice(1, parts.length - 1).join(',').replace(/"/g, '')
 
-      const date = parts[0]
-      // O valor é sempre a última coluna
-      const amountStr = parts[parts.length - 1]
-      // A descrição é tudo que está entre a data e o valor (caso tenha virgulas no nome)
-      const title = parts.slice(1, parts.length - 1).join(',')
+        // Tratamento de valor: Nubank CSV usa ponto para decimal.
+        const amount = parseFloat(amountStr)
 
-      const amount = parseFloat(amountStr)
-
-      if (!isNaN(amount)) {
-        addTransaction({
-          desc: title,
-          value: amount,
-          type: 'credit',
-          cardId: cardId,
-          date: date // Usa a data do CSV
-        })
-        count++
+        if (!isNaN(amount)) {
+          // AQUI ESTÁ O SEGREDO:
+          // Se o CSV traz positivo (gasto), adicionamos como positivo.
+          // O sistema entende: Positivo no cartão = Aumento da Fatura.
+          addTransaction({
+            desc: title,
+            value: amount, // Mantém positivo
+            type: 'credit',
+            cardId: cardId, // Vincula EXPLICITAMENTE a este cartão
+            date: date
+          })
+          count++
+        }
       }
     })
     return count
@@ -102,27 +105,10 @@ export const useFinanceStore = defineStore('finance', () => {
     if(type === 'transaction') transactions.value = transactions.value.filter(i => i.id !== id)
   }
 
-  const importJSON = (jsonString) => {
-    try {
-      const parsed = JSON.parse(jsonString)
-      assets.value = parsed.assets || []
-      cards.value = parsed.cards || []
-      fixedExpenses.value = parsed.fixedExpenses || []
-      receivables.value = parsed.receivables || []
-      transactions.value = parsed.transactions || []
-      alert('Dados importados com sucesso!')
-    } catch (e) {
-      alert('Erro ao importar JSON')
-    }
-  }
-
-  const exportJSON = () => {
+  const exportJSON = () => { /* Mantido igual */
     const data = JSON.stringify({
-      assets: assets.value,
-      cards: cards.value,
-      fixedExpenses: fixedExpenses.value,
-      receivables: receivables.value,
-      transactions: transactions.value
+      assets: assets.value, cards: cards.value, fixedExpenses: fixedExpenses.value,
+      receivables: receivables.value, transactions: transactions.value
     }, null, 2)
     const blob = new Blob([data], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -132,24 +118,40 @@ export const useFinanceStore = defineStore('finance', () => {
     a.click()
   }
 
+  const importJSON = (jsonString) => { /* Mantido igual */
+    try {
+      const parsed = JSON.parse(jsonString)
+      assets.value = parsed.assets || []
+      cards.value = parsed.cards || []
+      fixedExpenses.value = parsed.fixedExpenses || []
+      receivables.value = parsed.receivables || []
+      transactions.value = parsed.transactions || []
+      alert('Dados restaurados.')
+    } catch (e) { alert('Erro no JSON') }
+  }
+
   // --- GETTERS ---
   const totalAssets = computed(() => assets.value.reduce((acc, i) => acc + Number(i.value), 0))
   const totalReceivables = computed(() => receivables.value.reduce((acc, i) => acc + Number(i.value), 0))
   const totalFixed = computed(() => fixedExpenses.value.reduce((acc, i) => acc + Number(i.value), 0))
 
+  // Total de Faturas (Base + Transações de Crédito)
   const totalCards = computed(() => {
     let base = cards.value.reduce((acc, c) => acc + Number(c.currentInvoice || 0), 0)
+    // Soma todas as transações do tipo crédito
     const creditTransactions = transactions.value
       .filter(t => t.type === 'credit')
       .reduce((acc, t) => acc + Number(t.value), 0)
     return base + creditTransactions
   })
 
+  // Gastos Débito (Saem direto da conta)
   const totalDebitSpent = computed(() => transactions.value
     .filter(t => t.type !== 'credit')
     .reduce((acc, t) => acc + Number(t.value), 0)
   )
 
+  // Saldo Final
   const finalBalance = computed(() => {
     return (totalAssets.value + totalReceivables.value) - (totalFixed.value + totalCards.value + totalDebitSpent.value)
   })
