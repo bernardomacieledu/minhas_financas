@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply transition-colors duration-500 ease-in-out;
+  min-height: 100vh;
+}
+
+/* === TEMA ESCURO (Cyberpunk Glass) === */
+.card-dark {
+  background: rgba(20, 20, 25, 0.75); /* Um pouco mais escuro para o Modal ler melhor */
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+  color: white;
+  border-radius: 16px;
+  transition: all 0.3s ease;
+}
+
+/* VOLTOU A SER INPUT-GLASS */
+.input-glass {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  padding: 0.7rem 1rem; /* Mais espaçamento interno */
+  border-radius: 10px;
+  outline: none;
+  width: 100%;
+  font-size: 0.95rem;
+  transition: all 0.3s;
+}
+.input-glass:focus {
+  border-color: #00f3ff;
+  box-shadow: 0 0 15px rgba(0, 243, 255, 0.15);
+  background: rgba(0, 0, 0, 0.7);
+}
+
+/* === TEMA CLARO (Ice / Fintech) === */
+.card-light {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  color: #0f172a;
+  border-radius: 16px;
+  transition: all 0.3s ease;
+}
+
+.input-light {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  padding: 0.7rem 1rem;
+  border-radius: 10px;
+  outline: none;
+  width: 100%;
+  font-size: 0.95rem;
+  transition: all 0.3s;
+}
+.input-light:focus {
+  background: #ffffff;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* === BOTÕES === */
+.btn-primary {
+  background: linear-gradient(135deg, #00f3ff 0%, #00d4ff 100%);
+  color: #0f172a;
+  border-radius: 8px;
+  padding: 0.6rem 1.2rem;
+  font-weight: 700;
+  transition: all 0.3s;
+  border: none;
+  cursor: pointer;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  box-shadow: 0 4px 15px rgba(0, 243, 255, 0.3);
+}
+.btn-primary:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+.light-mode-btn {
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(79, 70, 229, 0.3);
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 0.4rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: 0.3s;
+  cursor: pointer;
+}
+
+/* === SCROLLBAR === */
+.custom-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+.custom-scroll::-webkit-scrollbar-track { background: transparent; }
+.custom-scroll::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; opacity: 0.5; }
