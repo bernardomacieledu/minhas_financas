@@ -23,7 +23,7 @@ const format = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', curren
     </div>
 
     <div class="space-y-2 mb-4 flex-1 overflow-y-auto custom-scroll max-h-40">
-      <div v-for="item in store.assets" :key="item.id" class="flex justify-between text-sm border-b pb-1 group"
+      <div v-for="item in store.monthlyAssets" :key="item.id" class="flex justify-between text-sm border-b pb-1 group"
            :class="isDark ? 'border-glassBorder' : 'border-slate-200'">
         <span>{{ item.name }}</span>
         <div class="flex gap-2 items-center">

@@ -8,7 +8,7 @@ import FixedExpenseList from './components/FixedExpenseList.vue'
 import DebitList from './components/DebitList.vue'
 import DebtorsList from './components/DebtorsList.vue'
 import CreditCardCenter from './components/CreditCardCenter.vue'
-import ManualTransactionModal from './components/ManualTransactionModal.vue' // <--- NOVO IMPORT
+import ManualTransactionModal from './components/ManualTransactionModal.vue'
 
 const store = useFinanceStore()
 const isDark = ref(true)
@@ -19,15 +19,13 @@ const jsonInput = ref(null) // Referência para o input de arquivo
 
 onMounted(() => store.init())
 
-// Aciona o input oculto
 const triggerRestore = () => jsonInput.value.click()
 
-// Processa o arquivo selecionado
 const handleRestoreFile = (e) => {
   const file = e.target.files[0]
   if (file) {
-    store.importJSONFile(file)
-    e.target.value = '' // Limpa para permitir re-upload
+    store.importJSONFile(file) // Chama a função que agora existe na store
+    e.target.value = '' 
   }
 }
 </script>
@@ -40,21 +38,30 @@ const handleRestoreFile = (e) => {
     <input type="file" ref="jsonInput" @change="handleRestoreFile" accept=".json" class="hidden" />
 
     <header class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-      <div>
+      <div class="flex flex-col items-start">
         <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r"
             :class="isDark ? 'from-neon to-purple-500' : 'from-indigo-600 to-purple-600'">
           FinVue Control
         </h1>
+        
+        <div class="flex items-center gap-2 mt-2 bg-opacity-10 rounded p-1 border" 
+             :class="isDark ? 'bg-white/5 border-white/10' : 'bg-white border-slate-300'">
+            <label class="text-xs font-bold opacity-60 uppercase pl-2">Mês:</label>
+            <input type="month" v-model="store.currentMonth" 
+                   class="bg-transparent border-none outline-none font-mono font-bold cursor-pointer text-sm"
+                   :class="isDark ? 'text-white' : 'text-indigo-900'">
+        </div>
       </div>
+
       <div class="flex items-center gap-3">
         <button @click="toggleTheme" class="p-2 rounded-full border transition"
                 :class="isDark ? 'bg-white/5 border-white/10 text-yellow-400' : 'bg-white border-slate-200 text-slate-600'">
           <span v-if="isDark">☀️</span><span v-else>🌙</span>
         </button>
         <button @click="store.exportJSON" class="btn-secondary" 
-                :class="isDark ? 'border-white/20 text-gray-400' : 'border-slate-300 text-slate-600'">Salvar Backup</button>
+                :class="isDark ? 'border-white/20 text-gray-400' : 'border-slate-300 text-slate-600'">Salvar</button>
         <button @click="triggerRestore" class="btn-secondary" 
-                :class="isDark ? 'border-white/20 text-gray-400' : 'border-slate-300 text-slate-600'">Restaurar JSON</button>
+                :class="isDark ? 'border-white/20 text-gray-400' : 'border-slate-300 text-slate-600'">Restaurar</button>
       </div>
     </header>
 
@@ -96,6 +103,5 @@ const handleRestoreFile = (e) => {
       :isDark="isDark" 
       @close="showManualModal = false" 
     />
-
   </div>
 </template>

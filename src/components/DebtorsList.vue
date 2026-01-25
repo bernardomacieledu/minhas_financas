@@ -7,7 +7,7 @@ const store = useFinanceStore()
 const format = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
 
 // Pega os devedores ordenados por data
-const list = computed(() => store.cardDebtors.slice().sort((a,b) => b.date.localeCompare(a.date)))
+const list = computed(() => store.monthlyCardDebtors.slice().sort((a,b) => b.date.localeCompare(a.date)))
 </script>
 
 <template>

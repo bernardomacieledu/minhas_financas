@@ -9,64 +9,37 @@ export const useFinanceStore = defineStore('finance', () => {
   const receivables = ref([])
   const transactions = ref([])
   
-  const currentMonth = ref(new Date().toISOString().slice(0, 7))
+  const currentMonth = ref(new Date().toISOString().slice(0, 7)) // YYYY-MM
   
-  // Chave atual. Se mudamos isso antes, os dados ficaram na chave antiga.
-  const STORAGE_KEY = 'finvue_v7_stable' 
-  // Lista de chaves antigas que usamos hoje para tentar recuperar
-  const OLD_KEYS = ['finvue_v6_final', 'finvue_v5_auto', 'finvue_v4_data', 'vue-fin-data-v2', 'vue-fin-data-v1']
+  // Chaves de armazenamento
+  const STORAGE_KEY = 'finvue_v8_monthly' // Chave Nova
+  const OLD_KEYS = ['finvue_v7_stable', 'finvue_v6_final', 'finvue_v5_auto', 'vue-fin-data-v1'] // Chaves Antigas
 
-  // --- PERSISTÊNCIA ROBUSTA ---
-  const saveToStorage = () => {
-    try {
-      const data = {
-        assets: assets.value,
-        cards: cards.value,
-        fixedExpenses: fixedExpenses.value,
-        receivables: receivables.value,
-        transactions: transactions.value
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-      console.log('Dados salvos automaticamente em:', new Date().toLocaleTimeString())
-    } catch (e) {
-      console.error('ERRO AO SALVAR NO LOCALSTORAGE:', e)
-      alert('Atenção: Erro ao salvar dados no navegador. Verifique o espaço em disco.')
-    }
-  }
-
-  // Observa qualquer mudança profundamente
-  watch([assets, cards, fixedExpenses, receivables, transactions], () => {
-    saveToStorage()
-  }, { deep: true })
-
-  // --- INIT ---
+  // --- INIT (Com Resgate Automático) ---
   function init() {
-    // 1. Tenta carregar da chave atual
     const data = localStorage.getItem(STORAGE_KEY)
     
     if (data) {
+      // Cenário 1: Já existe dados na versão nova
       loadData(data)
     } else {
-      // 2. Se não achou, tenta recuperar automaticamente das chaves antigas (Resgate)
-      console.warn("Nenhum dado na chave atual. Tentando recuperar de versões anteriores...")
-      recoverOldData()
+      // Cenário 2: Versão nova vazia -> TENTA RESGATAR DA ANTIGA
+      console.log("Iniciando migração de dados antigos...")
+      migrateOldData()
     }
   }
 
-  // Função interna para processar o JSON e corrigir tipos
+  // Função que carrega o JSON na memória
   const loadData = (jsonString) => {
     try {
       const parsed = JSON.parse(jsonString)
       const fix = (i) => ({ ...i, value: Number(i.value) || 0 })
-
+      
       assets.value = (parsed.assets || []).map(fix)
+      // Garante que o Invoice seja número
+      cards.value = (parsed.cards || []).map(c => ({...c, currentInvoice: Number(c.currentInvoice)||0}))
       fixedExpenses.value = (parsed.fixedExpenses || []).map(fix)
       receivables.value = (parsed.receivables || []).map(fix)
-      
-      cards.value = (parsed.cards || []).map(c => ({
-        ...c, currentInvoice: Number(c.currentInvoice) || 0
-      }))
-      
       transactions.value = (parsed.transactions || []).map(t => ({
         ...t, 
         value: Number(t.value) || 0,
@@ -74,41 +47,88 @@ export const useFinanceStore = defineStore('finance', () => {
         installments: t.installments || null,
         isPaid: t.isPaid || false
       }))
-      console.log("Dados carregados com sucesso.")
-    } catch (e) {
-      console.error("Erro ao processar JSON:", e)
-    }
+    } catch (e) { console.error("Erro ao carregar:", e) }
   }
 
-  // --- FUNÇÃO DE RESGATE DE DADOS PERDIDOS ---
-  const recoverOldData = () => {
+  // --- MÁGICA DE MIGRAÇÃO ---
+  const migrateOldData = () => {
+    let foundData = false
+    
+    // Procura em todas as chaves antigas
     for (const key of OLD_KEYS) {
-      const oldData = localStorage.getItem(key)
-      if (oldData) {
-        console.log(`Dados encontrados na chave antiga: ${key}. Restaurando...`)
-        loadData(oldData)
-        alert(`Seus dados foram recuperados da versão antiga (${key})! Eles foram salvos na nova versão.`)
-        saveToStorage() // Salva na nova chave imediatamente
-        return // Para ao encontrar o primeiro backup válido
+      const oldRaw = localStorage.getItem(key)
+      if (oldRaw) {
+        console.log(`Dados encontrados na chave: ${key}. Migrando...`)
+        try {
+          const parsed = JSON.parse(oldRaw)
+          const fixValue = (i) => Number(i.value) || 0
+          
+          // 1. Migrar Assets (Adiciona o mês atual para aparecerem agora)
+          assets.value = (parsed.assets || []).map(i => ({
+            ...i, value: fixValue(i), month: currentMonth.value, id: i.id || uid()
+          }))
+
+          // 2. Migrar Fixos (Adiciona o mês atual)
+          fixedExpenses.value = (parsed.fixedExpenses || []).map(i => ({
+            ...i, value: fixValue(i), month: currentMonth.value, id: i.id || uid()
+          }))
+
+          // 3. Migrar Recebíveis
+          receivables.value = (parsed.receivables || []).map(i => ({
+            ...i, value: fixValue(i), month: currentMonth.value, id: i.id || uid()
+          }))
+
+          // 4. Migrar Cartões (São globais, apenas copia)
+          cards.value = (parsed.cards || []).map(c => ({
+             ...c, currentInvoice: Number(c.currentInvoice) || 0, id: c.id || uid()
+          }))
+
+          // 5. Migrar Transações (Se não tiver data, coloca hoje)
+          transactions.value = (parsed.transactions || []).map(t => ({
+            ...t, 
+            value: fixValue(t),
+            id: t.id || uid(),
+            date: t.date || `${currentMonth.value}-01`, // Se perdeu a data, joga pro dia 01
+            owner: t.owner || 'Eu',
+            isPaid: t.isPaid || false
+          }))
+
+          foundData = true
+          alert(`Seus dados antigos da versão (${key}) foram encontrados e migrados para o novo sistema mensal!`)
+          break // Para na primeira chave que achar
+        } catch (e) {
+          console.error("Erro na migração:", e)
+        }
       }
     }
-    console.log("Nenhum dado antigo encontrado.")
+
+    if (!foundData) {
+      console.log("Nenhum dado antigo encontrado no navegador.")
+    }
   }
 
-  // --- ACTIONS ---
+  // --- PERSISTÊNCIA ---
+  watch([assets, cards, fixedExpenses, receivables, transactions], () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      assets: assets.value, cards: cards.value, fixedExpenses: fixedExpenses.value,
+      receivables: receivables.value, transactions: transactions.value
+    }))
+  }, { deep: true })
+
   const uid = () => Date.now().toString(36) + Math.random().toString(36).substr(2)
 
-  const addAsset = (i) => assets.value.push({ ...i, value: Number(i.value), id: uid() })
+  // --- ACTIONS ---
+  const addAsset = (i) => assets.value.push({ ...i, value: Number(i.value), id: uid(), month: currentMonth.value })
   const addCard = (i) => cards.value.push({ ...i, id: uid(), currentInvoice: Number(i.currentInvoice)||0 })
-  const addFixedExpense = (i) => fixedExpenses.value.push({ ...i, value: Number(i.value), id: uid() })
-  const addReceivable = (i) => receivables.value.push({ ...i, value: Number(i.value), id: uid() })
+  const addFixedExpense = (i) => fixedExpenses.value.push({ ...i, value: Number(i.value), id: uid(), month: currentMonth.value })
+  const addReceivable = (i) => receivables.value.push({ ...i, value: Number(i.value), id: uid(), month: currentMonth.value })
 
   const addTransaction = (t) => {
     transactions.value.push({ 
       ...t, 
       value: Number(t.value),
       id: uid(), 
-      date: t.date || new Date().toISOString().split('T')[0],
+      date: t.date || `${currentMonth.value}-01`, 
       installments: t.installments || null,
       owner: t.owner || 'Eu',
       isPaid: false
@@ -128,95 +148,77 @@ export const useFinanceStore = defineStore('finance', () => {
     if (t) t.isPaid = !t.isPaid
   }
 
-  // Importar Nubank
-  const importNubankTransactions = (csvText, cardId) => {
-    const lines = csvText.split('\n')
-    let count = 0
-    const startIndex = (lines[0].toLowerCase().includes('date')) ? 1 : 0
-
-    lines.slice(startIndex).forEach((line) => {
-      if (!line.trim()) return
-      const parts = line.split(',')
-      if (parts.length >= 3) {
-        const date = parts[0]
-        let amountStr = parts[parts.length - 1].trim()
-        const title = parts.slice(1, parts.length - 1).join(',').replace(/"/g, '')
-        const amount = parseFloat(amountStr)
-
-        if (!isNaN(amount)) {
-          addTransaction({
-            desc: title, value: amount, type: 'credit', cardId, date, owner: 'Eu'
-          })
-          count++
-        }
-      }
-    })
-    return count
-  }
-  
-  // --- EXPORTAR JSON (Backup Manual) ---
-  const exportJSON = () => {
-    try {
-      const data = JSON.stringify({
-         assets: assets.value, cards: cards.value, fixedExpenses: fixedExpenses.value,
-         receivables: receivables.value, transactions: transactions.value
-      }, null, 2)
-      
-      const blob = new Blob([data], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `finvue_backup_${new Date().toISOString().slice(0,10)}.json`
-      document.body.appendChild(a) // Necessário em alguns browsers
-      a.click()
-      document.body.removeChild(a)
-    } catch (e) {
-      console.error(e)
-      alert("Erro ao gerar arquivo de backup.")
-    }
-  }
-
-  // --- IMPORTAR JSON (Arquivo) ---
+  // --- IMPORT/EXPORT ---
   const importJSONFile = (file) => {
     if (!file) return
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
         loadData(e.target.result)
-        saveToStorage() // Salva imediatamente
-        alert('Backup restaurado com sucesso!')
-      } catch (err) {
-        alert('Arquivo inválido ou corrompido.')
-      }
+        alert('Backup restaurado! Verifique se a data das transações bate com o mês selecionado.')
+      } catch (err) { alert('Erro no arquivo JSON.') }
     }
     reader.readAsText(file)
   }
+  
+  const exportJSON = () => {
+    const data = JSON.stringify({
+       assets: assets.value, cards: cards.value, fixedExpenses: fixedExpenses.value,
+       receivables: receivables.value, transactions: transactions.value
+    }, null, 2)
+    const blob = new Blob([data], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `finvue_full_backup.json`; a.click()
+  }
 
-  // --- GETTERS ---
-  const currentMonthTransactions = computed(() => transactions.value.filter(t => t.date.startsWith(currentMonth.value)))
+  const importNubankTransactions = (csvText, cardId) => {
+    const lines = csvText.split('\n')
+    let count = 0
+    const startIndex = (lines[0].toLowerCase().includes('date')) ? 1 : 0
+    lines.slice(startIndex).forEach((line) => {
+      if (!line.trim()) return
+      const parts = line.split(',')
+      if (parts.length >= 3) {
+        const date = parts[0]
+        const amount = parseFloat(parts[parts.length - 1])
+        const title = parts.slice(1, parts.length - 1).join(',').replace(/"/g, '')
+        if (!isNaN(amount)) {
+          addTransaction({ desc: title, value: amount, type: 'credit', cardId, date, owner: 'Eu' })
+          count++
+        }
+      }
+    })
+    return count
+  }
 
-  const cardDebtors = computed(() => {
-    return transactions.value.filter(t => t.type === 'credit' && t.owner && t.owner !== 'Eu')
+  // --- GETTERS (FILTRADOS) ---
+  const monthlyTransactions = computed(() => transactions.value.filter(t => t.date.startsWith(currentMonth.value)))
+  const monthlyAssets = computed(() => assets.value.filter(i => i.month === currentMonth.value))
+  const monthlyFixed = computed(() => fixedExpenses.value.filter(i => i.month === currentMonth.value))
+  const monthlyReceivables = computed(() => receivables.value.filter(i => i.month === currentMonth.value))
+
+  const monthlyCardDebtors = computed(() => {
+    return monthlyTransactions.value.filter(t => t.type === 'credit' && t.owner && t.owner !== 'Eu')
   })
 
+  // --- TOTAIS ---
+  const totalAssets = computed(() => monthlyAssets.value.reduce((acc, i) => acc + i.value, 0))
+  const totalFixed = computed(() => monthlyFixed.value.reduce((acc, i) => acc + i.value, 0))
+  
   const totalReceivables = computed(() => {
-    const manualTotal = receivables.value.reduce((acc, i) => acc + i.value, 0)
-    const cardTotal = cardDebtors.value.reduce((acc, t) => acc + t.value, 0)
-    return manualTotal + cardTotal
+    const manual = monthlyReceivables.value.reduce((acc, i) => acc + i.value, 0)
+    const debtors = monthlyCardDebtors.value.reduce((acc, t) => acc + t.value, 0)
+    return manual + debtors
   })
-
-  const totalAssets = computed(() => assets.value.reduce((acc, i) => acc + i.value, 0))
-  const totalFixed = computed(() => fixedExpenses.value.reduce((acc, i) => acc + i.value, 0))
 
   const totalCards = computed(() => {
-    let base = cards.value.reduce((acc, c) => acc + c.currentInvoice, 0)
-    const creditTrans = currentMonthTransactions.value
+    return monthlyTransactions.value
       .filter(t => t.type === 'credit')
       .reduce((acc, t) => acc + t.value, 0)
-    return base + creditTrans
   })
 
-  const totalDebitSpent = computed(() => currentMonthTransactions.value
+  const totalDebitSpent = computed(() => monthlyTransactions.value
     .filter(t => t.type !== 'credit')
     .reduce((acc, t) => acc + t.value, 0)
   )
@@ -228,8 +230,8 @@ export const useFinanceStore = defineStore('finance', () => {
   return { 
     assets, cards, fixedExpenses, receivables, transactions, currentMonth,
     init, addAsset, addCard, addFixedExpense, addReceivable, addTransaction, deleteItem, togglePaid,
-    importNubankTransactions, exportJSON, importJSONFile, recoverOldData,
-    totalAssets, totalReceivables, totalFixed, totalCards, totalDebitSpent, finalBalance,
-    currentMonthTransactions, cardDebtors 
+    importNubankTransactions, exportJSON, importJSONFile, migrateOldData, // Exportando migrateOldData caso precise forçar
+    monthlyAssets, monthlyFixed, monthlyTransactions, monthlyCardDebtors,
+    totalAssets, totalFixed, totalReceivables, totalCards, totalDebitSpent, finalBalance
   }
 })

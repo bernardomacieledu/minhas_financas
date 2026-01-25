@@ -5,7 +5,7 @@ defineProps(['isDark'])
 
 const store = useFinanceStore()
 const selectedCardId = ref(null)
-const newCard = ref({ name: '', currentInvoice: '' })
+const newCard = ref({ name: '' })
 const fileInput = ref(null)
 
 onMounted(() => {
@@ -15,18 +15,16 @@ onMounted(() => {
 const currentCard = computed(() => store.cards.find(c => c.id === selectedCardId.value))
 
 const transactions = computed(() => {
-    if (!selectedCardId.value) return []
-    return store.transactions
-        .filter(t => t.type === 'credit' && t.cardId === selectedCardId.value)
-        .slice().reverse()
+  if (!selectedCardId.value) return []
+  return store.transactions
+    .filter(t => 
+      t.type === 'credit' && 
+      t.cardId === selectedCardId.value &&
+      t.date.startsWith(store.currentMonth) // Garante o mês
+    ).slice().reverse()
 })
 
-const cardTotal = computed(() => {
-    if (!currentCard.value) return 0
-    const base = Number(currentCard.value.currentInvoice || 0)
-    const sum = transactions.value.reduce((acc, t) => acc + Number(t.value), 0)
-    return base + sum
-})
+const cardTotal = computed(() => transactions.value.reduce((acc, t) => acc + Number(t.value), 0))
 
 const addCard = () => {
     if (!newCard.value.name) return
