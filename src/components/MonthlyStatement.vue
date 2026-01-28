@@ -31,7 +31,7 @@ const debitTransactions = computed(() => {
             </div>
             
             <div class="flex items-center gap-3">
-                <span class="font-mono font-bold text-rose-500">- {{ format(t.value) }}</span>
+                <span class="font-mono font-bold text-rose-500" >- {{ format(t.value) }}</span>
                 <button @click="store.deleteItem('transaction', t.id)" class="text-xs text-gray-400 hover:text-red-500">x</button>
             </div>
         </div>

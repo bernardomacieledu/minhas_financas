@@ -20,21 +20,45 @@ body {
 }
 
 /* VOLTOU A SER INPUT-GLASS */
+/* === CORREÇÃO DO ÍCONE DE CALENDÁRIO === */
+
 .input-glass {
   background: rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #e2e8f0;
-  padding: 0.7rem 1rem; /* Mais espaçamento interno */
+  padding: 0.7rem 1rem;
   border-radius: 10px;
   outline: none;
   width: 100%;
   font-size: 0.95rem;
   transition: all 0.3s;
+  
+  /* ESTA É A MÁGICA: Avisa ao navegador que este campo é escuro.
+     O navegador automaticamente deixa o ícone branco e o popup do calendário escuro. */
+  color-scheme: dark;
 }
+
 .input-glass:focus {
   border-color: #00f3ff;
   box-shadow: 0 0 15px rgba(0, 243, 255, 0.15);
   background: rgba(0, 0, 0, 0.7);
+}
+
+/* Garante que o ícone do Modal não seja invertido novamente (o que o deixaria preto) */
+.input-glass::-webkit-calendar-picker-indicator {
+    filter: none; /* Remove inversões anteriores */
+    opacity: 0.7;
+    cursor: pointer;
+}
+.input-glass::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+}
+
+/* O do cabeçalho precisa de invert pois não usa a classe input-glass completa */
+input[type="month"].text-white::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    cursor: pointer;
+    opacity: 0.8;
 }
 
 /* === TEMA CLARO (Ice / Fintech) === */
@@ -98,6 +122,28 @@ body {
   font-weight: 500;
   transition: 0.3s;
   cursor: pointer;
+}
+
+/* CLASSE DE CENSURA (Estilo Tarja / Redacted) */
+.privacy-blur {
+  /* 1. Torna o número invisível, mas mantém o espaço que ele ocupa */
+  color: transparent !important;
+
+  /* 2. Cria uma barra no fundo (tarja) */
+  background-color: rgba(148, 163, 184, 0.4); /* Cinza azulado com transparência */
+  
+  /* 3. Ajustes visuais da tarja */
+  border-radius: 6px;
+  box-shadow: none; /* Remove brilhos se tiver */
+  
+  /* 4. Proteção */
+  user-select: none;
+  cursor: default;
+}
+
+/* Opcional: Efeito pulsante suave para parecer "protegido" */
+.privacy-blur:hover {
+  background-color: rgba(148, 163, 184, 0.6);
 }
 
 /* === SCROLLBAR === */

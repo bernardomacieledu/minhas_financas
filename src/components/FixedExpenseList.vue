@@ -18,7 +18,7 @@ const format = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', curren
       <h3 class="font-bold flex items-center gap-2 text-danger">
         <span>📉</span> Fixos
       </h3>
-      <span class="text-xs font-mono">{{ format(store.totalFixed) }}</span>
+      <span class="text-xs font-mono" :class="{ 'privacy-blur': store.privacyMode }">{{ format(store.totalFixed) }}</span>
     </div>
 
     <div class="space-y-2 mb-4 flex-1 overflow-y-auto custom-scroll max-h-40">
@@ -26,7 +26,7 @@ const format = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', curren
            :class="isDark ? 'border-glassBorder' : 'border-slate-200'">
         <span>{{ item.name }}</span>
         <div class="flex gap-2 items-center">
-           <span class="font-mono opacity-90">{{ format(item.value) }}</span>
+           <span class="font-mono opacity-90" :class="{ 'privacy-blur': store.privacyMode }">{{ format(item.value) }}</span>
            <button @click="store.deleteItem('fixed', item.id)" class="text-danger opacity-0 group-hover:opacity-100">x</button>
         </div>
       </div>

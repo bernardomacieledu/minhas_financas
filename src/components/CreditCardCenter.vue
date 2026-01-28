@@ -97,7 +97,10 @@ const absFormat = (v) => format(Math.abs(v))
                     </div>
                     <div class="text-right shrink-0">
                         <div class="text-3xl font-bold font-mono tracking-tighter"
-                            :class="isDark ? 'text-purple-300' : 'text-indigo-700'">
+                            :class="[
+                                isDark ? 'text-purple-300' : 'text-indigo-700',
+                                { 'privacy-blur': store.privacyMode }
+                            ]">
                             {{ format(cardTotal) }}
                         </div>
                         <button @click="triggerFile"
@@ -139,7 +142,8 @@ const absFormat = (v) => format(Math.abs(v))
                                     </div>
                                 </td>
 
-                                <td class="py-3 text-right font-mono font-bold pr-4">
+                                <td class="py-3 text-right font-mono font-bold pr-4"
+                                    :class="{ 'privacy-blur': store.privacyMode }">
                                     <span v-if="t.value < 0" class="text-emerald-500">+ {{ absFormat(t.value) }}</span>
                                     <span v-else class="text-rose-500">- {{ absFormat(t.value) }}</span>
                                 </td>

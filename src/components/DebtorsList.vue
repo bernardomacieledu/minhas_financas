@@ -37,7 +37,7 @@ const list = computed(() => store.monthlyCardDebtors.slice().sort((a,b) => b.dat
           </div>
 
           <div class="flex flex-col items-end gap-1">
-             <span class="font-mono font-bold text-sm">{{ format(t.value) }}</span>
+             <span class="font-mono font-bold text-sm" :class="{ 'privacy-blur': store.privacyMode }">{{ format(t.value) }}</span>
              
              <button @click="store.togglePaid(t.id)" 
                      class="text-[10px] px-2 py-0.5 rounded-full border transition-all flex items-center gap-1 cursor-pointer select-none"
