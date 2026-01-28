@@ -90,8 +90,8 @@ const submit = () => {
                  <label class="block text-xs font-bold mb-1 opacity-70 ml-1">Quem Gastou?</label>
                  <select v-model="form.owner" :class="isDark ? 'input-glass' : 'input-light'">
                      <option value="Eu">Fui Eu</option>
-                     <option value="Mãe">Mãe</option>
-                     <option value="Esposa">Esposa</option>
+                     <option value="Bruno">Bruno</option>
+                     <option value="Tiago">Tiago</option>
                      <option value="Outro">Outro</option>
                  </select>
             </div>
