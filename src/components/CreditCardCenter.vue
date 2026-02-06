@@ -1,7 +1,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useFinanceStore } from '../stores/financeStore'
+
 defineProps(['isDark'])
+const emit = defineEmits(['edit']) // Permite emitir o evento de edição para o Pai
 
 const store = useFinanceStore()
 const selectedCardId = ref(null)
@@ -20,7 +22,7 @@ const transactions = computed(() => {
     .filter(t => 
       t.type === 'credit' && 
       t.cardId === selectedCardId.value &&
-      t.date.startsWith(store.currentMonth) // Garante o mês
+      t.date.startsWith(store.currentMonth) // Garante o mês selecionado
     ).slice().reverse()
 })
 
@@ -30,6 +32,7 @@ const addCard = () => {
     if (!newCard.value.name) return
     store.addCard({ ...newCard.value, currentInvoice: Number(newCard.value.currentInvoice || 0) })
     newCard.value = { name: '', currentInvoice: '' }
+    // Seleciona o novo cartão automaticamente
     setTimeout(() => selectedCardId.value = store.cards[store.cards.length - 1].id, 50)
 }
 
@@ -93,7 +96,7 @@ const absFormat = (v) => format(Math.abs(v))
                     :class="isDark ? 'border-white/10' : 'border-slate-200'">
                     <div>
                         <h2 class="text-2xl font-bold tracking-tight truncate">{{ currentCard.name }}</h2>
-                        <p class="text-sm opacity-60">Fatura Atual</p>
+                        <p class="text-sm opacity-60">Fatura Atual ({{ store.currentMonth }})</p>
                     </div>
                     <div class="text-right shrink-0">
                         <div class="text-3xl font-bold font-mono tracking-tighter"
@@ -121,15 +124,18 @@ const absFormat = (v) => format(Math.abs(v))
                                 <th class="py-3">Descrição</th>
                                 <th class="py-3 text-center w-24">Quem/Parc.</th>
                                 <th class="py-3 text-right pr-4 w-32">Valor</th>
-                                <th class="py-3 w-10"></th>
+                                <th class="py-3 w-16"></th>
                             </tr>
                         </thead>
                         <tbody class="divide-y" :class="isDark ? 'divide-white/5' : 'divide-slate-100'">
                             <tr v-for="t in transactions" :key="t.id" class="group transition hover:bg-opacity-50"
                                 :class="isDark ? 'hover:bg-white/5' : 'hover:bg-slate-50'">
 
-                                <td class="py-3 px-4 text-xs opacity-60 font-mono">{{ t.date.slice(5) }}</td>
-                                <td class="py-3 font-medium truncate max-w-[150px] md:max-w-none">{{ t.desc }}</td>
+                                <td class="py-3 px-4 text-xs opacity-60 font-mono">{{ t.date.slice(8) }}</td>
+                                
+                                <td class="py-3 font-medium truncate max-w-[150px] md:max-w-none" :title="t.desc">
+                                    {{ t.desc }}
+                                </td>
 
                                 <td class="py-3 text-center text-xs">
                                     <div v-if="t.installments"
@@ -148,7 +154,12 @@ const absFormat = (v) => format(Math.abs(v))
                                     <span v-else class="text-rose-500">- {{ absFormat(t.value) }}</span>
                                 </td>
 
-                                <td class="py-3 text-right pr-2">
+                                <td class="py-3 text-right pr-2 whitespace-nowrap">
+                                    <button @click="$emit('edit', t)" 
+                                            class="text-blue-400 hover:text-blue-300 opacity-0 group-hover:opacity-100 transition px-2" 
+                                            title="Editar">
+                                      ✎
+                                    </button>
                                     <button @click="store.deleteItem('transaction', t.id)"
                                         class="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition px-2">
                                         ×
@@ -160,7 +171,7 @@ const absFormat = (v) => format(Math.abs(v))
 
                     <div v-if="transactions.length === 0"
                         class="flex flex-col items-center justify-center h-40 opacity-40">
-                        <p>Nenhum lançamento.</p>
+                        <p>Nenhum lançamento neste cartão para {{ store.currentMonth }}.</p>
                     </div>
                 </div>
             </div>

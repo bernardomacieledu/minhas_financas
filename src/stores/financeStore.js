@@ -9,7 +9,7 @@ export const useFinanceStore = defineStore('finance', () => {
   const receivables = ref([])     
   const transactions = ref([])    
   
-  const currentMonth = ref(new Date().toISOString().slice(0, 7)) 
+  const currentMonth = ref(new Date().toISOString().slice(0, 7)) // YYYY-MM
   const privacyMode = ref(false)  
 
   const STORAGE_KEY = 'finvue_v8_monthly'
@@ -83,6 +83,15 @@ export const useFinanceStore = defineStore('finance', () => {
   // --- ACTIONS ---
   const togglePrivacy = () => privacyMode.value = !privacyMode.value
 
+  // Navegação de Mês (Setas)
+  const changeMonth = (step) => {
+    const [year, month] = currentMonth.value.split('-').map(Number)
+    // Cria data (mês é 0-indexado no JS, então month-1)
+    const date = new Date(year, month - 1 + step, 1)
+    // Formata de volta para YYYY-MM
+    currentMonth.value = date.toISOString().slice(0, 7)
+  }
+
   const addAsset = (i) => assets.value.push({ ...i, value: Number(i.value), id: uid(), month: currentMonth.value })
   const addFixedExpense = (i) => fixedExpenses.value.push({ ...i, value: Number(i.value), id: uid(), month: currentMonth.value })
   const addReceivable = (i) => receivables.value.push({ ...i, value: Number(i.value), id: uid(), month: currentMonth.value })
@@ -94,6 +103,22 @@ export const useFinanceStore = defineStore('finance', () => {
       date: t.date || `${currentMonth.value}-01`, 
       installments: t.installments || null, owner: t.owner || 'Eu', isPaid: false
     })
+  }
+
+  // Função genérica de edição
+  const editItem = (type, updatedItem) => {
+    let list = null
+    if (type === 'transaction') list = transactions
+    if (type === 'asset') list = assets
+    if (type === 'fixed') list = fixedExpenses
+    
+    if (list) {
+      const index = list.value.findIndex(i => i.id === updatedItem.id)
+      if (index !== -1) {
+        // Atualiza mantendo o ID original
+        list.value[index] = { ...list.value[index], ...updatedItem, value: Number(updatedItem.value) }
+      }
+    }
   }
 
   const deleteItem = (type, id) => {
@@ -164,14 +189,14 @@ export const useFinanceStore = defineStore('finance', () => {
   const totalDebitSpent = computed(() => monthlyTransactions.value.filter(t => t.type !== 'credit').reduce((acc, t) => acc + t.value, 0))
   const finalBalance = computed(() => (totalAssets.value + totalReceivables.value) - (totalFixed.value + totalCards.value + totalDebitSpent.value))
 
-  // --- ESTATÍSTICAS (Corrigido para usar Mês Atual no Ranking) ---
+  // --- ESTATÍSTICAS AVANÇADAS (DASHBOARD) ---
   const stats = computed(() => {
     const allTrans = transactions.value
-    const allFixed = fixedExpenses.value 
+    const allFixed = fixedExpenses.value
     
     if (allTrans.length === 0 && allFixed.length === 0) return null
 
-    // 1. Evolução Mensal (ESTE É HISTÓRICO - Usa tudo)
+    // 1. Evolução Mensal (HISTÓRICO COMPLETO)
     const byMonth = {}
     allTrans.forEach(t => {
       const m = t.date ? t.date.slice(0, 7) : currentMonth.value
@@ -187,20 +212,19 @@ export const useFinanceStore = defineStore('finance', () => {
     
     const highestMonth = [...monthlyEvolution].sort((a,b) => b.value - a.value)[0] || { month: '-', value: 0 }
 
-
-    // === AQUI MUDOU: Filtramos dados apenas do MÊS ATUAL para os detalhes ===
+    // === FILTROS PARA O MÊS ATUAL ===
     const thisMonthTrans = allTrans.filter(t => t.date.startsWith(currentMonth.value))
     const thisMonthFixed = allFixed.filter(f => f.month === currentMonth.value)
 
-    // 2. Ranking de Pessoas (Só Mês Atual)
+    // 2. Ranking de Pessoas (MÊS ATUAL)
     const byOwner = {}
     
-    // Transações do Mês
+    // Transações
     thisMonthTrans.forEach(t => {
         const owner = t.type === 'credit' ? t.owner : 'Eu'
         byOwner[owner] = (byOwner[owner] || 0) + Number(t.value)
     })
-    // Fixos do Mês
+    // Fixos (Sempre Eu)
     thisMonthFixed.forEach(f => {
         byOwner['Eu'] = (byOwner['Eu'] || 0) + Number(f.value)
     })
@@ -209,29 +233,39 @@ export const useFinanceStore = defineStore('finance', () => {
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
 
-    // 3. Top Despesas (Só Mês Atual - COMPLETO)
+    // 3. Top Despesas (MÊS ATUAL - COMPLETO)
     const byDesc = {}
     
-    thisMonthTrans.forEach(t => {
-        let cleanName = t.desc.toLowerCase().split('*')[0].split('-')[0].trim()
+    const processDesc = (desc, val) => {
+        let cleanName = desc.toLowerCase().split('*')[0].split('-')[0].trim()
         cleanName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1)
-        byDesc[cleanName] = (byDesc[cleanName] || 0) + Number(t.value)
-    })
-    thisMonthFixed.forEach(f => {
-        let cleanName = f.name.trim()
-        cleanName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1)
-        byDesc[cleanName] = (byDesc[cleanName] || 0) + Number(f.value)
-    })
+        byDesc[cleanName] = (byDesc[cleanName] || 0) + Number(val)
+    }
+
+    thisMonthTrans.forEach(t => processDesc(t.desc, t.value))
+    thisMonthFixed.forEach(f => processDesc(f.name, f.value))
     
     const topExpenses = Object.entries(byDesc)
         .map(([name, value]) => ({ name, value }))
         .sort((a, b) => b.value - a.value)
 
-    // 4. Totais (Só Mês Atual)
-    const totalTrans = thisMonthTrans.reduce((acc, t) => acc + Number(t.value), 0)
-    const totalFixos = thisMonthFixed.reduce((acc, f) => acc + Number(f.value), 0)
-    const totalSpent = totalTrans + totalFixos
+    // 4. Totais e Detalhamento "Fui Eu"
+    const totalSpent = (thisMonthTrans.reduce((acc, t) => acc + t.value, 0) + thisMonthFixed.reduce((acc, f) => acc + f.value, 0))
     const myTotalSpend = ownerRanking.find(o => o.name === 'Eu')?.value || 0
+    
+    // Meus Fixos
+    const myFixed = thisMonthFixed.reduce((acc, f) => acc + Number(f.value), 0)
+    
+    // Meus Cartões (Geral)
+    const myCardTrans = thisMonthTrans.filter(t => t.type === 'credit' && t.owner === 'Eu')
+    const myCardTotal = myCardTrans.reduce((acc, t) => acc + Number(t.value), 0)
+
+    // Meus Cartões (Por Cartão)
+    const myCardBreakdown = {}
+    myCardTrans.forEach(t => {
+        const cardName = cards.value.find(c => c.id === t.cardId)?.name || 'Cartão'
+        myCardBreakdown[cardName] = (myCardBreakdown[cardName] || 0) + Number(t.value)
+    })
 
     return { 
       monthlyEvolution, // Histórico
@@ -239,7 +273,10 @@ export const useFinanceStore = defineStore('finance', () => {
       ownerRanking,     // Mês Atual
       topExpenses,      // Mês Atual
       totalSpent,       // Mês Atual
-      myTotalSpend      // Mês Atual
+      myTotalSpend,     // Mês Atual
+      myFixed,          // Mês Atual
+      myCardTotal,      // Mês Atual
+      myCardBreakdown   // Mês Atual
     }
   })
 
@@ -247,7 +284,7 @@ export const useFinanceStore = defineStore('finance', () => {
     // State
     assets, cards, fixedExpenses, receivables, transactions, currentMonth, privacyMode,
     // Actions
-    init, addAsset, addCard, addFixedExpense, addReceivable, addTransaction, deleteItem, togglePaid, togglePrivacy,
+    init, changeMonth, addAsset, addCard, addFixedExpense, addReceivable, addTransaction, editItem, deleteItem, togglePaid, togglePrivacy,
     importNubankTransactions, exportJSON, importJSONFile, migrateOldData,
     // Getters Filtrados
     monthlyAssets, monthlyFixed, monthlyTransactions, monthlyCardDebtors,

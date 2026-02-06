@@ -150,3 +150,33 @@ input[type="month"].text-white::-webkit-calendar-picker-indicator {
 .custom-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
 .custom-scroll::-webkit-scrollbar-track { background: transparent; }
 .custom-scroll::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; opacity: 0.5; }
+
+/* --- ANIMAÇÕES --- */
+
+/* Transição de Troca de Mês (Slide) */
+.slide-fade-enter-active,
+.slide-fade-leave-active {
+  transition: all 0.3s ease-out;
+}
+.slide-fade-enter-from {
+  opacity: 0;
+  transform: translateX(20px);
+}
+.slide-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+/* Expansão do Gráfico (Accordian) */
+.expand-enter-active,
+.expand-leave-active {
+  transition: all 0.4s ease;
+  max-height: 1000px;
+  overflow: hidden;
+}
+.expand-enter-from,
+.expand-leave-to {
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-10px);
+}
