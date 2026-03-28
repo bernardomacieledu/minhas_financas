@@ -1,148 +1,196 @@
 <script setup>
-import { onMounted, ref, computed } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useFinanceStore } from './stores/financeStore'
 
-// Componentes
-import BalanceDisplay from './components/BalanceDisplay.vue'
-import AssetList from './components/AssetList.vue'
-import FixedExpenseList from './components/FixedExpenseList.vue'
-import DebtorsList from './components/DebtorsList.vue'
-import CreditCardCenter from './components/CreditCardCenter.vue'
-import ManualTransactionModal from './components/ManualTransactionModal.vue'
-import EditSimpleModal from './components/EditSimpleModal.vue' // <--- NOVO
-import StatisticsPanel from './components/StatisticsPanel.vue'
+import SummaryBar    from './components/SummaryBar.vue'
+import IncomePanel   from './components/IncomePanel.vue'
+import FixedPanel    from './components/FixedPanel.vue'
+import DebtorPanel   from './components/DebtorPanel.vue'
+import CardPanel     from './components/CardPanel.vue'
+import ReportPanel   from './components/ReportPanel.vue'
+import AddModal      from './components/AddModal.vue'
 
 const store = useFinanceStore()
-const isDark = ref(true)
-const toggleTheme = () => isDark.value = !isDark.value
-const showStats = ref(false)
 
-// Estados de Modal
-const showManualModal = ref(false)
-const transactionToEdit = ref(null) // Para editar transação
-const simpleEditItem = ref(null)    // Para editar Asset/Fixo
-const simpleEditType = ref('')
-
-const jsonInput = ref(null)
-onMounted(() => store.init())
-
-const triggerRestore = () => jsonInput.value.click()
-const handleRestoreFile = (e) => {
-  const file = e.target.files[0]
-  if (file) { store.importJSONFile(file); e.target.value = '' }
-}
-
-// Formatador de Mês (Ex: "Janeiro 2026")
-const formattedMonth = computed(() => {
-    const [y, m] = store.currentMonth.split('-')
-    const date = new Date(y, m - 1)
-    return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase()
+onMounted(() => {
+  store.load()
+  applyTheme()
 })
 
-// Handlers de Edição
-const openEditTransaction = (item) => {
-    transactionToEdit.value = item
-    showManualModal.value = true
+// ── Theme ────────────────────────────────────────────────────────────────
+function applyTheme() {
+  document.body.classList.toggle('light', !store.darkMode)
 }
-const openEditSimple = (item, type) => {
-    simpleEditItem.value = item
-    simpleEditType.value = type
+function toggleTheme() {
+  store.toggleDarkMode()
+  applyTheme()
 }
-const closeManualModal = () => {
-    showManualModal.value = false
-    transactionToEdit.value = null // Limpa edição ao fechar
+
+// ── Tabs ─────────────────────────────────────────────────────────────────
+const TABS = [
+  { id: 'income',  label: 'Entradas',  icon: '↑'  },
+  { id: 'fixed',   label: 'Fixos',     icon: '📌' },
+  { id: 'debtors', label: 'A Receber', icon: '↗'  },
+  { id: 'cards',   label: 'Cartões',   icon: '▣'  },
+  { id: 'reports', label: 'Relatórios',icon: '📊' },
+]
+const activeTab = ref('income')
+
+// ── Month navigation with slide direction ─────────────────────────────────
+const monthDir = ref(1)   // 1 = forward (left), -1 = backward (right)
+
+function changeMonth(step) {
+  monthDir.value = step
+  document.documentElement.style.setProperty('--month-dir', step > 0 ? '60px' : '-60px')
+  store.changeMonth(step)
+}
+
+const monthLabel = computed(() => {
+  const [y, m] = store.currentMonth.split('-')
+  return new Date(y, m - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+})
+
+// ── Modal ─────────────────────────────────────────────────────────────────
+const showModal   = ref(false)
+const modalPreset = ref(null)
+function openAdd(preset = null) { modalPreset.value = preset; showModal.value = true }
+
+// ── File restore ──────────────────────────────────────────────────────────
+const fileInput = ref(null)
+function handleRestore(e) {
+  const file = e.target.files[0]
+  if (file) { store.importJSON(file); e.target.value = '' }
 }
 </script>
 
 <template>
-  <div class="min-h-screen font-sans transition-colors duration-500 p-4 md:p-8 pb-24 relative"
-       :class="isDark ? 'bg-[#0f1014] text-white selection:bg-neon selection:text-black' : 'bg-slate-100 text-slate-800 selection:bg-indigo-200 selection:text-indigo-900'">
-    
-    <input type="file" ref="jsonInput" @change="handleRestoreFile" accept=".json" class="hidden" />
+  <div class="page">
+    <div class="app-shell">
 
-    <header class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-      <div class="flex flex-col items-start gap-3">
-        <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r"
-            :class="isDark ? 'from-neon to-purple-500' : 'from-indigo-600 to-purple-600'">
-          FinVue Control
-        </h1>
+      <!-- ── Top bar ──────────────────────────────────────────────────── -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <span class="logo">fin<b>vue</b></span>
 
-        <div class="flex items-center gap-4 bg-opacity-10 rounded-full p-1 border select-none"
-             :class="isDark ? 'bg-white/5 border-white/10' : 'bg-white border-slate-300'">
-             
-             <button @click="store.changeMonth(-1)" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition text-lg">‹</button>
-             
-             <span class="font-mono font-bold text-lg min-w-[160px] text-center tracking-wide" :class="isDark ? 'text-white' : 'text-indigo-900'">
-                {{ formattedMonth }}
-             </span>
-             
-             <button @click="store.changeMonth(1)" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition text-lg">›</button>
+          <div class="month-nav">
+            <button class="month-arrow" @click="changeMonth(-1)">‹</button>
+            <Transition name="fade" mode="out-in">
+              <span class="month-text" :key="store.currentMonth">{{ monthLabel }}</span>
+            </Transition>
+            <button class="month-arrow" @click="changeMonth(1)">›</button>
+          </div>
         </div>
-      </div>
 
-      <div class="flex items-center gap-3">
-        <button @click="showStats = !showStats" class="p-2 rounded-full border transition w-10 h-10 flex items-center justify-center"
-                :class="showStats ? (isDark ? 'bg-neon text-black border-neon' : 'bg-indigo-600 text-white border-indigo-600') : (isDark ? 'bg-white/5 border-white/10 text-gray-400' : 'bg-white border-slate-200 text-slate-500')">📊</button>
-        <button @click="toggleTheme" class="p-2 rounded-full border transition" :class="isDark ? 'bg-white/5 border-white/10 text-yellow-400' : 'bg-white border-slate-200 text-slate-600'">
-            <span v-if="isDark">☀️</span><span v-else>🌙</span>
-        </button>
-        <button @click="store.togglePrivacy" class="p-2 rounded-full border transition w-10 h-10 flex items-center justify-center" :class="isDark ? 'bg-white/5 border-white/10 text-emerald-400' : 'bg-white border-slate-200 text-emerald-600'">
-            <span v-if="store.privacyMode">🙈</span><span v-else>👁️</span>
-        </button>
-        <button @click="store.exportJSON" class="btn-secondary" :class="isDark ? 'border-white/20 text-gray-400' : 'border-slate-300 text-slate-600'">Salvar</button>
-        <button @click="triggerRestore" class="btn-secondary" :class="isDark ? 'border-white/20 text-gray-400' : 'border-slate-300 text-slate-600'">Restaurar</button>
-      </div>
-    </header>
-
-    <Transition name="expand">
-        <div v-if="showStats" class="mb-6">
-            <StatisticsPanel :isDark="isDark" />
+        <div class="topbar-right">
+          <button class="btn-icon theme-btn" @click="toggleTheme"
+            :title="store.darkMode ? 'Modo claro' : 'Modo escuro'">
+            {{ store.darkMode ? '☀️' : '🌙' }}
+          </button>
+          <button class="btn-icon" @click="store.togglePrivacy"
+            :title="store.privacyMode ? 'Mostrar' : 'Ocultar'">
+            {{ store.privacyMode ? '🙈' : '👁' }}
+          </button>
+          <button class="btn btn-ghost" @click="openAdd()">+ Adicionar</button>
+          <button class="btn btn-ghost" @click="store.exportJSON">Exportar</button>
+          <button class="btn btn-ghost" @click="fileInput.click()">Restaurar</button>
+          <input ref="fileInput" type="file" accept=".json" style="display:none" @change="handleRestore">
         </div>
-    </Transition>
+      </header>
 
-    <Transition name="slide-fade" mode="out-in">
-        
-        <main :key="store.currentMonth" class="grid grid-cols-1 md:grid-cols-12 gap-6">
-          <div class="col-span-1 md:col-span-12">
-            <BalanceDisplay :isDark="isDark" />
-          </div>
+      <!-- ── Summary ──────────────────────────────────────────────────── -->
+      <SummaryBar />
 
-          <div class="col-span-1 md:col-span-6 h-80">
-            <AssetList :isDark="isDark" @edit="(item) => openEditSimple(item, 'asset')" />
-          </div>
-          <div class="col-span-1 md:col-span-6 h-80">
-            <FixedExpenseList :isDark="isDark" @edit="(item) => openEditSimple(item, 'fixed')" />
-          </div>
+      <!-- ── Tabs ─────────────────────────────────────────────────────── -->
+      <nav class="tab-nav">
+        <button
+          v-for="tab in TABS" :key="tab.id"
+          class="tab-btn" :class="{ active: activeTab === tab.id }"
+          @click="activeTab = tab.id"
+        >
+          <span class="tab-icon">{{ tab.icon }}</span>
+          <span class="tab-label">{{ tab.label }}</span>
+        </button>
+      </nav>
 
-          <div class="col-span-1 md:col-span-4 h-[600px]">
-            <DebtorsList :isDark="isDark" />
-          </div>
+      <!-- ── Content with month slide animation ───────────────────────── -->
+      <main class="content">
+        <Transition name="fade" mode="out-in">
+          <IncomePanel  v-if="activeTab === 'income'"   key="income"   @add="openAdd('income')"  />
+          <FixedPanel   v-else-if="activeTab === 'fixed'"   key="fixed"   @add="openAdd('fixed')"   />
+          <DebtorPanel  v-else-if="activeTab === 'debtors'" key="debtors" @add="openAdd('debtor')"  />
+          <CardPanel    v-else-if="activeTab === 'cards'"   key="cards"   @add="openAdd('credit')"  />
+          <ReportPanel  v-else-if="activeTab === 'reports'" key="reports" />
+        </Transition>
+      </main>
 
-          <div class="col-span-1 md:col-span-8 h-[600px]">
-            <CreditCardCenter :isDark="isDark" @edit="openEditTransaction" />
-          </div>
-        </main>
-    </Transition>
-
-    <button @click="showManualModal = true"
-            class="fixed bottom-8 right-8 w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-3xl font-bold transition-transform hover:scale-110 z-40"
-            :class="isDark ? 'bg-neon text-black shadow-neon/50' : 'bg-indigo-600 text-white shadow-indigo-500/50'">
-      +
-    </button>
-
-    <ManualTransactionModal 
-      :isOpen="showManualModal" 
-      :isDark="isDark" 
-      :editingItem="transactionToEdit" 
-      @close="closeManualModal" 
-    />
-
-    <EditSimpleModal 
-      :isOpen="!!simpleEditItem" 
-      :isDark="isDark" 
-      :item="simpleEditItem" 
-      :type="simpleEditType"
-      @close="simpleEditItem = null"
-    />
+      <AddModal v-if="showModal" :preset="modalPreset" @close="showModal = false" />
+    </div>
   </div>
 </template>
+
+<style scoped>
+.page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  background: var(--bg);
+}
+.app-shell {
+  width: 100%;
+  max-width: 900px;
+  padding: 0 20px 60px;
+}
+
+/* ── Topbar ───────────────────────────────────────────────────────────── */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 22px 0 18px; gap: 12px; flex-wrap: wrap;
+}
+.topbar-left, .topbar-right { display: flex; align-items: center; gap: 8px; }
+
+.logo { font-size: 1.2rem; color: var(--ink3); letter-spacing: -.02em; }
+.logo b { color: var(--accent); font-weight: 700; }
+
+/* ── Month nav ────────────────────────────────────────────────────────── */
+.month-nav { display: flex; align-items: center; gap: 6px; }
+.month-arrow {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1.5px solid var(--border2); background: var(--surface2);
+  color: var(--ink2); font-size: 1.15rem; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all .18s;
+}
+.month-arrow:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+.month-text {
+  font-size: .82rem; font-weight: 600;
+  min-width: 148px; text-align: center;
+  text-transform: capitalize; color: var(--ink);
+  background: var(--surface); border: 1.5px solid var(--border2);
+  border-radius: 99px; padding: 6px 16px;
+  display: inline-block;
+}
+
+/* ── Theme btn ────────────────────────────────────────────────────────── */
+.theme-btn { font-size: .9rem; }
+
+/* ── Tabs ─────────────────────────────────────────────────────────────── */
+.tab-nav {
+  display: flex; gap: 2px;
+  background: var(--surface); border: 1.5px solid var(--border2);
+  border-radius: var(--radius); padding: 4px; margin-bottom: 20px;
+}
+.tab-btn {
+  flex: 1; height: 36px; border: none; border-radius: var(--radius-sm);
+  background: transparent; color: var(--ink3);
+  font-size: .78rem; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  cursor: pointer; transition: all .18s;
+}
+.tab-btn:hover  { color: var(--ink); background: var(--surface2); }
+.tab-btn.active { background: var(--accent); color: #fff; }
+.tab-icon { font-size: .88rem; }
+@media (max-width: 560px) { .tab-label { display: none; } }
+
+/* ── Content ──────────────────────────────────────────────────────────── */
+.content { position: relative; min-height: 300px; }
+</style>

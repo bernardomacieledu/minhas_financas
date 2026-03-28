@@ -1,296 +1,307 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
+
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2)
+const STORAGE_KEY = 'finvue_v10'
 
 export const useFinanceStore = defineStore('finance', () => {
-  // --- STATE (DADOS) ---
-  const assets = ref([])          
-  const cards = ref([])           
-  const fixedExpenses = ref([])   
-  const receivables = ref([])     
-  const transactions = ref([])    
-  
-  const currentMonth = ref(new Date().toISOString().slice(0, 7)) // YYYY-MM
-  const privacyMode = ref(false)  
+  // ── State ──────────────────────────────────────────────────────────────
+  const currentMonth = ref(new Date().toISOString().slice(0, 7))
+  const privacyMode  = ref(false)
+  const darkMode     = ref(true)
 
-  const STORAGE_KEY = 'finvue_v8_monthly'
-  const OLD_KEYS = ['finvue_v7_stable', 'finvue_v6_final', 'finvue_v5_auto', 'vue-fin-data-v1']
+  // income: { id, label, amount, month }
+  const incomes = ref([])
 
-  // --- INIT ---
-  function init() {
-    const data = localStorage.getItem(STORAGE_KEY)
-    if (data) {
-      loadData(data)
-    } else {
-      console.log("Iniciando verificação de dados antigos...")
-      migrateOldData()
-    }
-  }
+  // fixed: { id, label, amount, month, isPaid }
+  const fixed = ref([])
 
-  const loadData = (jsonString) => {
-    try {
-      const parsed = JSON.parse(jsonString)
-      const fix = (i) => ({ ...i, value: Number(i.value) || 0 })
-      
-      assets.value = (parsed.assets || []).map(fix)
-      cards.value = (parsed.cards || []).map(c => ({...c, currentInvoice: Number(c.currentInvoice)||0}))
-      fixedExpenses.value = (parsed.fixedExpenses || []).map(fix)
-      receivables.value = (parsed.receivables || []).map(fix)
-      transactions.value = (parsed.transactions || []).map(t => ({
-        ...t, 
-        value: Number(t.value) || 0,
-        owner: t.owner || 'Eu',
-        installments: t.installments || null,
-        isPaid: t.isPaid || false
-      }))
-    } catch (e) { console.error("Erro ao carregar:", e) }
-  }
+  // debtors: { id, name, description, amount, dueDate, isPaid, month }
+  const debtors = ref([])
 
-  const migrateOldData = () => {
-    for (const key of OLD_KEYS) {
-      const oldRaw = localStorage.getItem(key)
-      if (oldRaw) {
-        try {
-          const parsed = JSON.parse(oldRaw)
-          const fixVal = (i) => Number(i.value) || 0
-          
-          assets.value = (parsed.assets || []).map(i => ({...i, value: fixVal(i), month: currentMonth.value, id: i.id || uid()}))
-          fixedExpenses.value = (parsed.fixedExpenses || []).map(i => ({...i, value: fixVal(i), month: currentMonth.value, id: i.id || uid()}))
-          receivables.value = (parsed.receivables || []).map(i => ({...i, value: fixVal(i), month: currentMonth.value, id: i.id || uid()}))
-          cards.value = (parsed.cards || []).map(c => ({...c, currentInvoice: Number(c.currentInvoice)||0, id: c.id || uid()}))
-          transactions.value = (parsed.transactions || []).map(t => ({
-            ...t, value: fixVal(t), id: t.id || uid(),
-            date: t.date || `${currentMonth.value}-01`, 
-            owner: t.owner || 'Eu', isPaid: t.isPaid || false
-          }))
-          
-          alert(`Dados migrados da versão antiga (${key}) com sucesso!`)
-          return 
-        } catch (e) { console.error(e) }
-      }
-    }
-  }
+  // cards: { id, name, closingDay }
+  const cards = ref([])
 
-  // --- PERSISTÊNCIA ---
-  watch([assets, cards, fixedExpenses, receivables, transactions, privacyMode], () => {
+  // transactions: { id, cardId, description, amount, date, installments, owner, ownerName, isPaid }
+  // type field removed — all transactions are credit card entries
+  const transactions = ref([])
+
+  // ── Persistence ────────────────────────────────────────────────────────
+  function persist() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      assets: assets.value, cards: cards.value, fixedExpenses: fixedExpenses.value,
-      receivables: receivables.value, transactions: transactions.value
+      currentMonth: currentMonth.value,
+      incomes: incomes.value,
+      fixed: fixed.value,
+      debtors: debtors.value,
+      cards: cards.value,
+      transactions: transactions.value,
+      darkMode: darkMode.value,
     }))
-  }, { deep: true })
-
-  const uid = () => Date.now().toString(36) + Math.random().toString(36).substr(2)
-
-  // --- ACTIONS ---
-  const togglePrivacy = () => privacyMode.value = !privacyMode.value
-
-  // Navegação de Mês (Setas)
-  const changeMonth = (step) => {
-    const [year, month] = currentMonth.value.split('-').map(Number)
-    // Cria data (mês é 0-indexado no JS, então month-1)
-    const date = new Date(year, month - 1 + step, 1)
-    // Formata de volta para YYYY-MM
-    currentMonth.value = date.toISOString().slice(0, 7)
   }
 
-  const addAsset = (i) => assets.value.push({ ...i, value: Number(i.value), id: uid(), month: currentMonth.value })
-  const addFixedExpense = (i) => fixedExpenses.value.push({ ...i, value: Number(i.value), id: uid(), month: currentMonth.value })
-  const addReceivable = (i) => receivables.value.push({ ...i, value: Number(i.value), id: uid(), month: currentMonth.value })
-  const addCard = (i) => cards.value.push({ ...i, id: uid(), currentInvoice: Number(i.currentInvoice)||0 })
-
-  const addTransaction = (t) => {
-    transactions.value.push({ 
-      ...t, value: Number(t.value), id: uid(), 
-      date: t.date || `${currentMonth.value}-01`, 
-      installments: t.installments || null, owner: t.owner || 'Eu', isPaid: false
-    })
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (!raw) return migrateOld()
+      const d = JSON.parse(raw)
+      currentMonth.value = d.currentMonth || currentMonth.value
+      incomes.value      = d.incomes      || []
+      fixed.value        = d.fixed        || []
+      debtors.value      = d.debtors      || []
+      cards.value        = d.cards        || []
+      transactions.value = d.transactions || []
+      darkMode.value     = d.darkMode !== undefined ? d.darkMode : true
+    } catch (e) { console.error('load error', e) }
   }
 
-  // Função genérica de edição
-  const editItem = (type, updatedItem) => {
-    let list = null
-    if (type === 'transaction') list = transactions
-    if (type === 'asset') list = assets
-    if (type === 'fixed') list = fixedExpenses
-    
-    if (list) {
-      const index = list.value.findIndex(i => i.id === updatedItem.id)
-      if (index !== -1) {
-        // Atualiza mantendo o ID original
-        list.value[index] = { ...list.value[index], ...updatedItem, value: Number(updatedItem.value) }
-      }
+  function migrateOld() {
+    const OLD = ['finvue_v9', 'finvue_v8_monthly', 'finvue_v7_stable']
+    for (const key of OLD) {
+      const raw = localStorage.getItem(key)
+      if (!raw) continue
+      try {
+        const d = JSON.parse(raw)
+        // Map old assets → incomes
+        incomes.value = (d.assets || []).map(a => ({
+          id: a.id || uid(), label: a.name, amount: Number(a.value) || 0, month: a.month || currentMonth.value
+        }))
+        // Map old fixedExpenses → fixed
+        fixed.value = (d.fixedExpenses || []).map(f => ({
+          id: f.id || uid(), label: f.name, amount: Number(f.value) || 0, month: f.month || currentMonth.value, isPaid: false
+        }))
+        // Map old receivables / debtors
+        debtors.value = (d.debtors || d.receivables || []).map(r => ({
+          id: r.id || uid(), name: r.name, description: r.desc || '', amount: Number(r.value) || 0,
+          dueDate: r.dueDate || '', isPaid: r.isPaid || false, month: r.month || currentMonth.value
+        }))
+        cards.value = (d.cards || []).map(c => ({
+          id: c.id || uid(), name: c.name, closingDay: c.closingDay || 1
+        }))
+        transactions.value = (d.transactions || []).filter(t => t.type === 'credit').map(t => ({
+          id: t.id || uid(), cardId: t.cardId, description: t.desc,
+          amount: Number(t.value) || 0, date: t.date, installments: t.installments || '',
+          owner: t.owner || 'Eu', ownerName: t.ownerName || '', isPaid: t.isPaid || false
+        }))
+        alert(`Dados migrados de ${key}!`)
+        return
+      } catch (e) { console.error(e) }
     }
   }
 
-  const deleteItem = (type, id) => {
-    if(type === 'asset') assets.value = assets.value.filter(i => i.id !== id)
-    if(type === 'card') cards.value = cards.value.filter(i => i.id !== id)
-    if(type === 'fixed') fixedExpenses.value = fixedExpenses.value.filter(i => i.id !== id)
-    if(type === 'receivable') receivables.value = receivables.value.filter(i => i.id !== id)
-    if(type === 'transaction') transactions.value = transactions.value.filter(i => i.id !== id)
-  }
-
-  const togglePaid = (id) => {
-    const t = transactions.value.find(i => i.id === id)
-    if (t) t.isPaid = !t.isPaid
-  }
-
-  const importJSONFile = (file) => {
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try { loadData(e.target.result); alert('Backup restaurado!') } catch (err) { alert('Erro no arquivo JSON.') }
+  // ── Auto-advance to next month if current month everything is paid ──────
+  function autoAdvanceMonth() {
+    const allFixedPaid = fixed.value.filter(f => f.month === currentMonth.value).every(f => f.isPaid)
+    const allCardsPaid = cards.value.every(c => c.invoicePaid?.[currentMonth.value])
+    const hasData = fixed.value.some(f => f.month === currentMonth.value) ||
+                    cards.value.some(c => (c.invoiceTotal?.[currentMonth.value] ?? null) !== null)
+    if (hasData && allFixedPaid && allCardsPaid) {
+      const [y, m] = currentMonth.value.split('-').map(Number)
+      const next = new Date(y, m, 1).toISOString().slice(0, 7)
+      currentMonth.value = next
     }
-    reader.readAsText(file)
   }
 
-  const exportJSON = () => {
-    const data = JSON.stringify({
-       assets: assets.value, cards: cards.value, fixedExpenses: fixedExpenses.value,
-       receivables: receivables.value, transactions: transactions.value
-    }, null, 2)
-    const blob = new Blob([data], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = `finvue_backup_${Date.now()}.json`; a.click()
+  // ── Month helpers ──────────────────────────────────────────────────────
+  function changeMonth(step) {
+    const [y, m] = currentMonth.value.split('-').map(Number)
+    const d = new Date(y, m - 1 + step, 1)
+    currentMonth.value = d.toISOString().slice(0, 7)
+    persist()
   }
 
-  const importNubankTransactions = (csvText, cardId) => {
-    const lines = csvText.split('\n')
-    let count = 0
-    const startIndex = (lines[0].toLowerCase().includes('date')) ? 1 : 0
-    lines.slice(startIndex).forEach((line) => {
-      if (!line.trim()) return
-      const parts = line.split(',')
-      if (parts.length >= 3) {
-        const date = parts[0]
-        const amount = parseFloat(parts[parts.length - 1])
-        const title = parts.slice(1, parts.length - 1).join(',').replace(/"/g, '')
-        if (!isNaN(amount)) {
-          addTransaction({ desc: title, value: amount, type: 'credit', cardId, date, owner: 'Eu' })
-          count++
-        }
-      }
-    })
-    return count
-  }
-
-  // --- GETTERS (FILTROS) ---
-  const monthlyTransactions = computed(() => transactions.value.filter(t => t.date.startsWith(currentMonth.value)))
-  const monthlyAssets = computed(() => assets.value.filter(i => i.month === currentMonth.value))
-  const monthlyFixed = computed(() => fixedExpenses.value.filter(i => i.month === currentMonth.value))
-  const monthlyReceivables = computed(() => receivables.value.filter(i => i.month === currentMonth.value))
-  const monthlyCardDebtors = computed(() => monthlyTransactions.value.filter(t => t.type === 'credit' && t.owner && t.owner !== 'Eu'))
-
-  // --- TOTAIS ---
-  const totalAssets = computed(() => monthlyAssets.value.reduce((acc, i) => acc + i.value, 0))
-  const totalFixed = computed(() => monthlyFixed.value.reduce((acc, i) => acc + i.value, 0))
-  const totalReceivables = computed(() => monthlyReceivables.value.reduce((acc, i) => acc + i.value, 0) + monthlyCardDebtors.value.reduce((acc, t) => acc + t.value, 0))
-  const totalCards = computed(() => monthlyTransactions.value.filter(t => t.type === 'credit').reduce((acc, t) => acc + t.value, 0))
-  const totalDebitSpent = computed(() => monthlyTransactions.value.filter(t => t.type !== 'credit').reduce((acc, t) => acc + t.value, 0))
-  const finalBalance = computed(() => (totalAssets.value + totalReceivables.value) - (totalFixed.value + totalCards.value + totalDebitSpent.value))
-
-  // --- ESTATÍSTICAS AVANÇADAS (DASHBOARD) ---
-  const stats = computed(() => {
-    const allTrans = transactions.value
-    const allFixed = fixedExpenses.value
-    
-    if (allTrans.length === 0 && allFixed.length === 0) return null
-
-    // 1. Evolução Mensal (HISTÓRICO COMPLETO)
-    const byMonth = {}
-    allTrans.forEach(t => {
-      const m = t.date ? t.date.slice(0, 7) : currentMonth.value
-      byMonth[m] = (byMonth[m] || 0) + Number(t.value)
-    })
-    allFixed.forEach(f => {
-       if (f.month) byMonth[f.month] = (byMonth[f.month] || 0) + Number(f.value)
-    })
-
-    const monthlyEvolution = Object.entries(byMonth)
-      .map(([month, value]) => ({ month, value }))
-      .sort((a, b) => a.month.localeCompare(b.month))
-    
-    const highestMonth = [...monthlyEvolution].sort((a,b) => b.value - a.value)[0] || { month: '-', value: 0 }
-
-    // === FILTROS PARA O MÊS ATUAL ===
-    const thisMonthTrans = allTrans.filter(t => t.date.startsWith(currentMonth.value))
-    const thisMonthFixed = allFixed.filter(f => f.month === currentMonth.value)
-
-    // 2. Ranking de Pessoas (MÊS ATUAL)
-    const byOwner = {}
-    
-    // Transações
-    thisMonthTrans.forEach(t => {
-        const owner = t.type === 'credit' ? t.owner : 'Eu'
-        byOwner[owner] = (byOwner[owner] || 0) + Number(t.value)
-    })
-    // Fixos (Sempre Eu)
-    thisMonthFixed.forEach(f => {
-        byOwner['Eu'] = (byOwner['Eu'] || 0) + Number(f.value)
-    })
-
-    const ownerRanking = Object.entries(byOwner)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-
-    // 3. Top Despesas (MÊS ATUAL - COMPLETO)
-    const byDesc = {}
-    
-    const processDesc = (desc, val) => {
-        let cleanName = desc.toLowerCase().split('*')[0].split('-')[0].trim()
-        cleanName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1)
-        byDesc[cleanName] = (byDesc[cleanName] || 0) + Number(val)
-    }
-
-    thisMonthTrans.forEach(t => processDesc(t.desc, t.value))
-    thisMonthFixed.forEach(f => processDesc(f.name, f.value))
-    
-    const topExpenses = Object.entries(byDesc)
-        .map(([name, value]) => ({ name, value }))
-        .sort((a, b) => b.value - a.value)
-
-    // 4. Totais e Detalhamento "Fui Eu"
-    const totalSpent = (thisMonthTrans.reduce((acc, t) => acc + t.value, 0) + thisMonthFixed.reduce((acc, f) => acc + f.value, 0))
-    const myTotalSpend = ownerRanking.find(o => o.name === 'Eu')?.value || 0
-    
-    // Meus Fixos
-    const myFixed = thisMonthFixed.reduce((acc, f) => acc + Number(f.value), 0)
-    
-    // Meus Cartões (Geral)
-    const myCardTrans = thisMonthTrans.filter(t => t.type === 'credit' && t.owner === 'Eu')
-    const myCardTotal = myCardTrans.reduce((acc, t) => acc + Number(t.value), 0)
-
-    // Meus Cartões (Por Cartão)
-    const myCardBreakdown = {}
-    myCardTrans.forEach(t => {
-        const cardName = cards.value.find(c => c.id === t.cardId)?.name || 'Cartão'
-        myCardBreakdown[cardName] = (myCardBreakdown[cardName] || 0) + Number(t.value)
-    })
-
-    return { 
-      monthlyEvolution, // Histórico
-      highestMonth,     // Histórico
-      ownerRanking,     // Mês Atual
-      topExpenses,      // Mês Atual
-      totalSpent,       // Mês Atual
-      myTotalSpend,     // Mês Atual
-      myFixed,          // Mês Atual
-      myCardTotal,      // Mês Atual
-      myCardBreakdown   // Mês Atual
-    }
+  const formattedMonth = computed(() => {
+    const [y, m] = currentMonth.value.split('-')
+    return new Date(y, m - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
   })
 
-  return { 
-    // State
-    assets, cards, fixedExpenses, receivables, transactions, currentMonth, privacyMode,
-    // Actions
-    init, changeMonth, addAsset, addCard, addFixedExpense, addReceivable, addTransaction, editItem, deleteItem, togglePaid, togglePrivacy,
-    importNubankTransactions, exportJSON, importJSONFile, migrateOldData,
-    // Getters Filtrados
-    monthlyAssets, monthlyFixed, monthlyTransactions, monthlyCardDebtors,
-    // Getters Totais
-    totalAssets, totalFixed, totalReceivables, totalCards, totalDebitSpent, finalBalance,
-    // Analytics
-    stats
+  // ── Filtered lists ─────────────────────────────────────────────────────
+  const monthIncomes = computed(() => incomes.value.filter(i => i.month === currentMonth.value))
+  const monthFixed   = computed(() => fixed.value.filter(i => i.month === currentMonth.value))
+  const monthDebtors = computed(() => debtors.value.filter(i => i.month === currentMonth.value))
+  const monthTxns    = computed(() =>
+    transactions.value.filter(t => t.date && t.date.startsWith(currentMonth.value))
+  )
+
+  // Debtors from card transactions (owner !== Eu)
+  const cardDebtors  = computed(() => monthTxns.value.filter(t => t.owner !== 'Eu'))
+
+  // ── Totals ─────────────────────────────────────────────────────────────
+  const totalIncome = computed(() => monthIncomes.value.reduce((a, i) => a + i.amount, 0))
+  const totalFixed  = computed(() => monthFixed.value.reduce((a, i) => a + i.amount, 0))
+
+  // Per-card effective total: manual quickTotal wins over sum of transactions
+  const cardTotals = computed(() =>
+    cards.value.map(card => {
+      const quickTotal = card.invoiceTotal?.[currentMonth.value] ?? null
+      const amount = quickTotal !== null
+        ? quickTotal
+        : transactions.value
+            .filter(t => t.cardId === card.id && t.date?.startsWith(currentMonth.value))
+            .reduce((a, t) => a + t.amount, 0)
+      return { id: card.id, name: card.name, amount, isPaid: card.invoicePaid?.[currentMonth.value] || false }
+    }).filter(c => c.amount > 0)
+  )
+
+  const totalCards   = computed(() => cardTotals.value.reduce((a, c) => a + c.amount, 0))
+  // A Receber: sempre mostra o total completo no saldo — isPaid é só indicativo visual
+  const totalDebtors = computed(() =>
+    monthDebtors.value.reduce((a, d) => a + d.amount, 0) +
+    cardDebtors.value.reduce((a, t) => a + t.amount, 0)
+  )
+
+  // Fixed payment progress
+  const fixedPaidCount = computed(() => monthFixed.value.filter(i => i.isPaid).length)
+  const fixedAllPaid   = computed(() => monthFixed.value.length > 0 && fixedPaidCount.value === monthFixed.value.length)
+
+  const balance = computed(() =>
+    (totalIncome.value + totalDebtors.value) - (totalFixed.value + totalCards.value)
+  )
+
+  // ── CRUD ───────────────────────────────────────────────────────────────
+  function addIncome(label, amount) {
+    incomes.value.push({ id: uid(), label, amount: Number(amount), month: currentMonth.value })
+    persist()
+  }
+  function removeIncome(id) { incomes.value = incomes.value.filter(i => i.id !== id); persist() }
+  function updateIncome(id, patch) {
+    const i = incomes.value.find(i => i.id === id)
+    if (i) Object.assign(i, patch)
+    persist()
+  }
+
+  function addFixed(label, amount) {
+    fixed.value.push({ id: uid(), label, amount: Number(amount), month: currentMonth.value, isPaid: false })
+    persist()
+  }
+  function removeFixed(id) { fixed.value = fixed.value.filter(i => i.id !== id); persist() }
+  function updateFixed(id, patch) {
+    const i = fixed.value.find(i => i.id === id)
+    if (i) Object.assign(i, patch)
+    persist()
+  }
+  function toggleFixedPaid(id) {
+    const i = fixed.value.find(i => i.id === id)
+    if (i) { i.isPaid = !i.isPaid; persist() }
+  }
+
+  function addDebtor({ name, description, amount, dueDate }) {
+    debtors.value.push({ id: uid(), name, description, amount: Number(amount), dueDate, isPaid: false, month: currentMonth.value })
+    persist()
+  }
+  function removeDebtor(id) { debtors.value = debtors.value.filter(i => i.id !== id); persist() }
+  function toggleDebtorPaid(id) {
+    const d = debtors.value.find(i => i.id === id)
+    if (d) { d.isPaid = !d.isPaid; persist() }
+  }
+
+  function addCard(name, closingDay) {
+    const card = { id: uid(), name, closingDay: Number(closingDay) || 1 }
+    cards.value.push(card)
+    persist()
+    return card.id
+  }
+  function removeCard(id) {
+    cards.value = cards.value.filter(c => c.id !== id)
+    transactions.value = transactions.value.filter(t => t.cardId !== id)
+    persist()
+  }
+
+  function addTransaction({ cardId, description, amount, date, installments, owner, ownerName }) {
+    transactions.value.push({
+      id: uid(), cardId, description, amount: Number(amount), date,
+      installments: installments || '', owner: owner || 'Eu', ownerName: ownerName || '', isPaid: false
+    })
+    persist()
+  }
+  function removeTransaction(id) { transactions.value = transactions.value.filter(t => t.id !== id); persist() }
+  function toggleTxnPaid(id) {
+    const t = transactions.value.find(t => t.id === id)
+    if (t) { t.isPaid = !t.isPaid; persist() }
+  }
+
+  function exportJSON() {
+    const blob = new Blob([JSON.stringify({ currentMonth: currentMonth.value, incomes: incomes.value, fixed: fixed.value, debtors: debtors.value, cards: cards.value, transactions: transactions.value }, null, 2)], { type: 'application/json' })
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
+    a.download = `finvue_${Date.now()}.json`; a.click()
+  }
+
+  function importJSON(file) {
+    const r = new FileReader()
+    r.onload = e => {
+      try {
+        const d = JSON.parse(e.target.result)
+        incomes.value = d.incomes || []; fixed.value = d.fixed || []
+        debtors.value = d.debtors || []; cards.value = d.cards || []
+        transactions.value = d.transactions || []
+        if (d.currentMonth) currentMonth.value = d.currentMonth
+        persist()
+      } catch { alert('Arquivo inválido.') }
+    }
+    r.readAsText(file)
+  }
+
+  function togglePrivacy() { privacyMode.value = !privacyMode.value }
+  function toggleDarkMode() {
+    darkMode.value = !darkMode.value
+    persist()
+  }
+
+  // ── Report data: all months aggregated ─────────────────────────────────
+  const reportData = computed(() => {
+    // Gather all unique months across all data
+    const monthSet = new Set()
+    incomes.value.forEach(i => i.month && monthSet.add(i.month))
+    fixed.value.forEach(f => f.month && monthSet.add(f.month))
+    debtors.value.forEach(d => d.month && monthSet.add(d.month))
+    cards.value.forEach(c => {
+      if (c.invoiceTotal) Object.keys(c.invoiceTotal).forEach(m => m && monthSet.add(m))
+    })
+    transactions.value.forEach(t => t.date && monthSet.add(t.date.slice(0,7)))
+
+    const months = [...monthSet].sort()
+
+    return months.map(m => {
+      const mIncomes  = incomes.value.filter(i => i.month === m).reduce((a,i) => a+i.amount, 0)
+      const mFixed    = fixed.value.filter(f => f.month === m).reduce((a,f) => a+f.amount, 0)
+      const mDebtors  = debtors.value.filter(d => d.month === m).reduce((a,d) => a+d.amount, 0)
+      const mCards    = cards.value.reduce((sum, card) => {
+        const qt = card.invoiceTotal?.[m] ?? null
+        if (qt !== null) return sum + qt
+        return sum + transactions.value
+          .filter(t => t.cardId === card.id && t.date?.startsWith(m))
+          .reduce((a,t) => a+t.amount, 0)
+      }, 0)
+      const mTotalOut = mFixed + mCards
+      const mBalance  = (mIncomes + mDebtors) - mTotalOut
+
+      // Per-card breakdown
+      const cardBreakdown = cards.value.map(card => {
+        const qt = card.invoiceTotal?.[m] ?? null
+        const amt = qt !== null ? qt : transactions.value
+          .filter(t => t.cardId === card.id && t.date?.startsWith(m))
+          .reduce((a,t) => a+t.amount, 0)
+        return { id: card.id, name: card.name, amount: amt }
+      }).filter(c => c.amount > 0)
+
+      return { month: m, income: mIncomes, fixed: mFixed, cards: mCards, debtors: mDebtors, balance: mBalance, cardBreakdown }
+    })
+  })
+
+  return {
+    // state
+    currentMonth, formattedMonth, privacyMode,
+    incomes, fixed, debtors, cards, transactions,
+    // filtered
+    monthIncomes, monthFixed, monthDebtors, monthTxns, cardDebtors,
+    // totals
+    totalIncome, totalFixed, totalCards, totalDebtors, balance, cardTotals, fixedPaidCount, fixedAllPaid,
+    // actions
+    load, changeMonth, autoAdvanceMonth,
+    addIncome, removeIncome, updateIncome,
+    addFixed, removeFixed, updateFixed, toggleFixedPaid,
+    addDebtor, removeDebtor, toggleDebtorPaid,
+    addCard, removeCard,
+    addTransaction, removeTransaction, toggleTxnPaid,
+    persist, exportJSON, importJSON, togglePrivacy, toggleDarkMode, darkMode, reportData,
   }
 })
